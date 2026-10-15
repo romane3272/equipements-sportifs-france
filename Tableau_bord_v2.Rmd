@@ -1,0 +1,91 @@
+---
+title: "Les établissements sportifs en France métropolitaine"
+output: flexdashboard::flex_dashboard
+date: "2026-10-13"
+---
+
+```{r}
+#Les library
+
+library(dplyr)
+library(tidyverse)
+library(sf)
+library(leaflet)
+library(ggplot2)
+library(ggspatial)
+library(prettymapr)
+
+```
+
+
+```{r setup, include=FALSE}
+#Chargement des données
+
+data<-read.csv2("C:/Users/roman/Desktop/Projets chômage/Infrastructures sportives en sport/data-es-equipement.csv")
+
+data <- data |>
+  separate(Coordonnees, into = c("lat", "lon"), sep = ",\\s*",
+           convert = TRUE, remove = FALSE)|>
+  filter(!is.na(lat), !is.na(lon))
+
+#exclure les DOM TOM
+
+data_metro <- data |>
+  filter(!is.na(lat), !is.na(lon),
+         lat >= 41, lat <= 51.5,
+         lon >= -5.5, lon <= 10)
+
+# Transformer en objet spatial (WGS84 = EPSG:4326)
+equip_sf <- st_as_sf(data_metro, coords = c("lon", "lat"), crs = 4326)
+
+```
+
+
+Carte  
+=====================================
+
+### Les 10 types d'équipements les plus présents en France métropolitaine.
+
+```{r}
+
+top10 <- equip_sf |>
+  st_drop_geometry() |>
+  count(Type.de.l.équipement, sort = TRUE) |>
+  slice_head(n = 10) |>
+  pull(Type.de.l.équipement)
+
+equip_top10 <- equip_sf |>
+  filter(Type.de.l.équipement %in% top10)
+
+```
+
+
+```{r}
+
+
+pal <- colorFactor("Paired", domain = equip_top10$Type.de.l.équipement)
+
+# Nom de groupe = pastille colorée + type
+equip_top10 <- equip_top10 |>
+  mutate(groupe = paste0(
+    "<span style='color:", pal(Type.de.l.équipement), "; font-size:16px'>&#9679;</span> ",
+    Type.de.l.équipement
+  ))
+
+leaflet(st_transform(equip_top10, 4326)) |>
+  addProviderTiles(providers$Esri.WorldGrayCanvas) |>   # <- seule modification
+  addCircleMarkers(
+    radius = 1,
+    color = ~pal(Type.de.l.équipement),
+    stroke = FALSE,
+    fillOpacity = 0.6,
+    popup = ~Type.de.l.équipement,
+    group = ~groupe
+  ) |>
+  addLayersControl(
+    overlayGroups = unique(equip_top10$groupe),
+    options = layersControlOptions(collapsed = FALSE)
+  ) |>
+  addScaleBar(position = "bottomleft")
+```
+
